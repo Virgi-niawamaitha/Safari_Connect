@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AiBanner, Metric, ChartBar } from '../../components/UI';
+import { AiBanner, AiDecisionGrid, Metric, ChartBar } from '../../components/UI';
 import { requestSafe } from '../../lib/api';
 
 export default function OwnerDashboard() {
   const navigate = useNavigate();
   const [aiText, setAiText] = useState('<strong>Friday Nakuru route will be 96% full.</strong> Deploy extra vehicle by Thursday. Projected extra revenue: KES 42,500. Dynamic pricing raised fares 24% — zero cancellations.');
   const [aiAction, setAiAction] = useState(() => () => navigate('/owner/fleet'));
+  const [decisions, setDecisions] = useState([
+    { id: 'dispatch', label: 'Dispatch', status: 'Standby', value: 'Add one standby bus on Nakuru line', detail: 'Projected occupancy above 92%', tone: 'amber' },
+    { id: 'pricing', label: 'Pricing', status: 'Surge', value: 'Increase fare by 6-8% for evening slot', detail: 'High demand with low cancellation risk', tone: 'green' },
+    { id: 'risk', label: 'Delay Risk', status: 'Monitor', value: 'Traffic risk medium after 6 PM', detail: 'Shift departure window by 10 minutes', tone: 'blue' }
+  ]);
 
   useEffect(() => {
     let mounted = true;
@@ -53,6 +58,33 @@ export default function OwnerDashboard() {
       } else {
         setAiAction(() => () => navigate('/owner/analytics'));
       }
+
+      setDecisions([
+        {
+          id: 'dispatch',
+          label: 'Dispatch',
+          status: operations?.action === 'add_vehicle' ? 'Scale Up' : 'Stable',
+          value: operations?.dispatchAdvice || 'No dispatch changes required',
+          detail: `Demand ${operations?.demandLevel || '-'} · Occupancy ${Math.round((operations?.occupancyRate || 0) * 100)}%`,
+          tone: operations?.action === 'add_vehicle' ? 'amber' : 'green'
+        },
+        {
+          id: 'pricing',
+          label: 'Pricing',
+          status: response?.data?.modules?.pricing?.demandLevel || 'Normal',
+          value: `Predicted KES ${Math.round(Number(response?.data?.modules?.pricing?.predictedPrice || 0)).toLocaleString()}`,
+          detail: response?.data?.modules?.pricing?.cheaperWindowSuggestion || 'No better window detected',
+          tone: response?.data?.modules?.pricing?.demandLevel === 'high' ? 'amber' : 'green'
+        },
+        {
+          id: 'risk',
+          label: 'Delay Risk',
+          status: response?.data?.modules?.delayRisk?.riskLevel || 'Low',
+          value: response?.data?.modules?.delayRisk?.recommendation || 'Routes stable',
+          detail: `Risk score ${response?.data?.modules?.delayRisk?.riskScore ?? '-'}`,
+          tone: response?.data?.modules?.delayRisk?.riskLevel === 'high' ? 'red' : response?.data?.modules?.delayRisk?.riskLevel === 'medium' ? 'amber' : 'blue'
+        }
+      ]);
     };
 
     loadOpsBrief();
@@ -78,6 +110,7 @@ export default function OwnerDashboard() {
       </div>
       <div className="page-body">
         <AiBanner text={aiText} action={<button className="btn btn-primary btn-sm" onClick={aiAction}>AI Action →</button>} />
+        <AiDecisionGrid title="Autonomous Fleet Decisions" decisions={decisions} />
         <div className="metric-grid">
           <Metric label="Trips today" value="8" sub="2 on route now"/>
           <Metric label="Bookings today" value="87" sub="+12% vs yesterday"/>

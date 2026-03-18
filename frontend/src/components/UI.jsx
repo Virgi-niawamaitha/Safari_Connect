@@ -51,6 +51,27 @@ export function AiBanner({ text, action }) {
   );
 }
 
+// ---- AUTONOMOUS DECISION GRID ----
+export function AiDecisionGrid({ title = 'Autonomous AI Decisions', decisions = [] }) {
+  return (
+    <div className="card" style={{ marginBottom: 20 }}>
+      <div className="card-title">{title}</div>
+      <div className="ai-decision-grid">
+        {decisions.map((decision) => (
+          <div key={decision.id || decision.label} className="ai-decision-card">
+            <div className="ai-decision-head">
+              <span className="ai-decision-label">{decision.label}</span>
+              <span className={`ai-pill ${decision.tone || 'blue'}`}>{decision.status}</span>
+            </div>
+            <div className="ai-decision-value">{decision.value}</div>
+            {decision.detail && <div className="ai-decision-detail">{decision.detail}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ---- METRIC ----
 export function Metric({ label, value, sub, neg }) {
   return (

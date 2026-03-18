@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AiBanner, Modal } from '../../components/UI';
+import { AiBanner, AiDecisionGrid, Modal } from '../../components/UI';
 import { requestSafe } from '../../lib/api';
 
 export default function UserHome() {
@@ -12,6 +12,11 @@ export default function UserHome() {
   const [travelDate, setTravelDate] = useState('');
   const [travelTime, setTravelTime] = useState('08:00');
   const [aiText, setAiText] = useState('<strong>Good morning, Jane!</strong> Based on your history, Nairobi → Nakuru is your top route. Next departure in 42 minutes — 14 seats left.');
+  const [decisions, setDecisions] = useState([
+    { id: 'best', label: 'Best Trip', status: 'Recommended', value: 'Nairobi → Nakuru 08:00', detail: 'Balanced fare, fastest travel, strong reliability', tone: 'green' },
+    { id: 'price', label: 'Price Timing', status: 'Save', value: 'Book before 7:30 AM to save ~KES 120', detail: 'Demand is rising for morning departures', tone: 'amber' },
+    { id: 'risk', label: 'Trip Risk', status: 'Low', value: 'Delay risk currently low', detail: 'Weather and route risk under threshold', tone: 'blue' }
+  ]);
 
   const cats = [
     { id: 'bus', icon: '🚌', name: 'Buses', desc: 'Long-distance · AC · Comfortable' },
@@ -43,6 +48,75 @@ export default function UserHome() {
     }
   };
 
+  useEffect(() => {
+    let mounted = true;
+
+    const loadAutonomousUserDecision = async () => {
+      const response = await requestSafe('/ai/assist', {
+        method: 'POST',
+        body: JSON.stringify({
+          route: `${from}-${to}`,
+          departureTime: travelDate ? `${travelDate}T${travelTime || '08:00'}:00.000Z` : new Date().toISOString(),
+          currentPrice: 980,
+          totalSeats: 50,
+          bookedSeats: 34,
+          noShowRate: 0.1,
+          trips: [
+            { id: 'USER-1', price: 850, travelMinutes: 220, reliabilityScore: 0.82 },
+            { id: 'USER-2', price: 1050, travelMinutes: 195, reliabilityScore: 0.88 },
+            { id: 'USER-3', price: 780, travelMinutes: 245, reliabilityScore: 0.73 }
+          ],
+          intent: { maxBudget: 1200, maxTravelMinutes: 260 },
+          riskFactors: { weatherRisk: 0.16, trafficRisk: 0.44, routeRisk: 0.25 },
+          fraudSignals: { attemptsLast24h: 0, cardMismatch: false, rapidRetries: 0, geoMismatch: false },
+          prompt: `Recommend the best autonomous travel decision for ${from} to ${to}`,
+          language: 'en'
+        })
+      });
+
+      if (!mounted || !response?.data?.modules) return;
+
+      const modules = response.data.modules;
+      const summaryText = response?.data?.summary?.passengerMessage;
+      if (summaryText) {
+        setAiText(`<strong>Autonomous travel brief:</strong> ${summaryText}`);
+      }
+
+      setDecisions([
+        {
+          id: 'best',
+          label: 'Best Trip',
+          status: modules.recommendation?.topPick ? 'Recommended' : 'Needs Input',
+          value: modules.recommendation?.topPick || `${from} → ${to}`,
+          detail: modules.recommendation?.rationale || 'Provide date and budget for stronger match',
+          tone: modules.recommendation?.topPick ? 'green' : 'amber'
+        },
+        {
+          id: 'price',
+          label: 'Price Timing',
+          status: modules.pricing?.demandLevel || 'Normal',
+          value: `Predicted fare KES ${Math.round(Number(modules.pricing?.predictedPrice || 0)).toLocaleString()}`,
+          detail: modules.pricing?.cheaperWindowSuggestion || 'No cheaper window detected',
+          tone: modules.pricing?.demandLevel === 'high' ? 'amber' : 'green'
+        },
+        {
+          id: 'risk',
+          label: 'Trip Risk',
+          status: modules.delayRisk?.riskLevel || 'Low',
+          value: modules.delayRisk?.recommendation || 'Trip conditions look stable',
+          detail: `Risk score ${modules.delayRisk?.riskScore ?? '-'}`,
+          tone: modules.delayRisk?.riskLevel === 'high' ? 'red' : modules.delayRisk?.riskLevel === 'medium' ? 'amber' : 'blue'
+        }
+      ]);
+    };
+
+    loadAutonomousUserDecision();
+
+    return () => {
+      mounted = false;
+    };
+  }, [from, to, travelDate, travelTime]);
+
   const submitSearch = async () => {
     setSearchOpen(false);
     await runAiHint();
@@ -70,6 +144,7 @@ export default function UserHome() {
           text={aiText}
           action={<button className="btn btn-primary btn-sm" onClick={submitSearch}>Quick book →</button>}
         />
+        <AiDecisionGrid title="Autonomous Trip Decisions" decisions={decisions} />
 
         {/* Transport Categories */}
         <div className="section-title">Transport categories</div>
