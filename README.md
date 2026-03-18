@@ -2,7 +2,7 @@
 ## Project setup
 
 ```bash
-git clone https://github.com/vanessaNjoroge2/AI-Parking-Management-System.git
+git clone https://github.com/vanessaNjoroge2/Safari_Connect.git
 cd backend
 ```
 
