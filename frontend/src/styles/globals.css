@@ -730,6 +730,52 @@ body {
   font-size: 11px;
 }
 
+.ai-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ai-plan-card {
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-plan-scenario {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gray-700);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.ai-plan-impact {
+  font-family: 'Syne', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.ai-plan-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--gray-500);
+}
+
+.ai-plan-action {
+  font-size: 12px;
+  color: var(--gray-600);
+  line-height: 1.45;
+  min-height: 36px;
+}
+
 /* SEPARATOR */
 .sep {
   height: 1px;

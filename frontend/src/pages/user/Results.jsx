@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AiBanner, Badge } from '../../components/UI';
+import { AiBanner, AiDecisionGrid, AiPlanningBoard, Badge, showToast } from '../../components/UI';
 import { requestSafe } from '../../lib/api';
 
 const buses = [
@@ -17,6 +17,16 @@ export default function Results() {
   const [selectedClass, setSelectedClass] = useState('');
   const [items, setItems] = useState(buses);
   const [aiText, setAiText] = useState('<strong>High demand detected.</strong> Fares dynamically priced up 24% today — 89% of seats already filled. Book now to secure your seat.');
+  const [decisions, setDecisions] = useState([
+    { id: 'best', label: 'Best Offer', status: 'Recommended', value: 'Balanced price + reliability', detail: 'Top route match for your search', tone: 'green', confidence: '82%', updatedAt: 'now', evidence: ['Budget fit', 'Travel time', 'Reliability'] },
+    { id: 'price', label: 'Price Window', status: 'Monitor', value: 'Fare pressure rising', detail: 'Book earlier to avoid surge', tone: 'amber', confidence: '75%', updatedAt: 'now', evidence: ['Demand trend', 'Fare baseline', 'Time window'] },
+    { id: 'risk', label: 'Delay Risk', status: 'Low', value: 'Current delay risk manageable', detail: 'Route conditions stable', tone: 'blue', confidence: '71%', updatedAt: 'now', evidence: ['Traffic', 'Weather', 'Route risk'] }
+  ]);
+  const [plans, setPlans] = useState([
+    { id: 'book_cheapest', scenario: 'Budget lock', impact: 'Save up to KES 180', risk: 'Low risk', eta: 'Now', action: 'Auto-focus cheapest reliable options in current route.', tone: 'green' },
+    { id: 'faster_trip', scenario: 'Time priority', impact: 'Reduce travel by ~35 minutes', risk: 'Medium risk', eta: 'Next departure', action: 'Prioritize low-duration trips over lowest fare.', tone: 'amber' },
+    { id: 'seat_secure', scenario: 'Seat security', impact: 'Lower sell-out risk', risk: 'Medium risk', eta: 'Immediate', action: 'Prioritize trips with low available seats for immediate booking.', tone: 'blue' }
+  ]);
 
   const origin = useMemo(() => location.state?.origin || 'Nairobi', [location.state]);
   const destination = useMemo(() => location.state?.destination || 'Nakuru', [location.state]);
@@ -51,35 +61,116 @@ export default function Results() {
       });
 
       setItems(mapped);
-    };
 
-    const loadAi = async () => {
-      const response = await requestSafe('/ai/assist', {
+      const avgPrice = list.reduce((sum, trip) => sum + Number(trip.basePrice || 0), 0) / list.length;
+      const totalSeats = list.reduce((sum, trip) => sum + Number(trip.bus?.seatCapacity || 0), 0);
+      const bookedSeats = list.reduce((sum, trip) => sum + (Number(trip.bus?.seatCapacity || 0) - Number(trip.availableSeatsCount || 0)), 0);
+
+      const assist = await requestSafe('/ai/assist', {
         method: 'POST',
         body: JSON.stringify({
           route: `${origin}-${destination}`,
           departureTime: date ? `${date}T${time || '08:00'}:00.000Z` : new Date().toISOString(),
-          currentPrice: 1200,
+          currentPrice: Math.round(avgPrice || 1200),
+          totalSeats: totalSeats || 50,
+          bookedSeats: bookedSeats || 20,
+          noShowRate: 0.1,
           riskFactors: { weatherRisk: 0.2, trafficRisk: 0.5, routeRisk: 0.3 },
           fraudSignals: { attemptsLast24h: 0, cardMismatch: false, rapidRetries: 0, geoMismatch: false },
           prompt: `Suggest the best booking strategy for ${origin} to ${destination}`,
           language: 'en',
-          trips: []
+          trips: list.slice(0, 12).map((trip) => ({
+            id: trip.id,
+            price: Number(trip.basePrice || 0),
+            travelMinutes: Number(trip.route?.estimatedTime || 240),
+            reliabilityScore: Number(trip.availableSeatsCount || 0) < 5 ? 0.74 : 0.86
+          })),
+          intent: { maxBudget: maxPrice, maxTravelMinutes: 300 }
         })
       });
-      const message = response?.data?.summary?.passengerMessage;
+
+      const message = assist?.data?.summary?.passengerMessage;
       if (message && mounted) {
         setAiText(`<strong>AI guidance:</strong> ${message}`);
       }
+
+      const modules = assist?.data?.modules;
+      if (!modules || !mounted) return;
+
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setDecisions([
+        {
+          id: 'best',
+          label: 'Best Offer',
+          status: modules.recommendation?.topPick ? 'Recommended' : 'Needs input',
+          value: modules.recommendation?.topPick || 'Best route pending',
+          detail: modules.recommendation?.rationale || 'Add tighter budget/time preference',
+          tone: modules.recommendation?.topPick ? 'green' : 'amber',
+          confidence: `${Math.round((modules.recommendation?.confidence || 0.8) * 100)}%`,
+          updatedAt: now,
+          evidence: modules.recommendation?.signalsUsed?.slice(0, 3) || ['Budget fit', 'Duration', 'Reliability']
+        },
+        {
+          id: 'price',
+          label: 'Price Window',
+          status: modules.pricing?.demandLevel || 'Normal',
+          value: `Predicted fare KES ${Math.round(Number(modules.pricing?.predictedPrice || 0)).toLocaleString()}`,
+          detail: modules.pricing?.cheaperWindowSuggestion || 'No cheaper window detected',
+          tone: modules.pricing?.demandLevel === 'high' ? 'amber' : 'green',
+          confidence: `${Math.round((modules.pricing?.confidence || 0.75) * 100)}%`,
+          updatedAt: now,
+          evidence: modules.pricing?.signalsUsed?.slice(0, 3) || ['Demand trend', 'Fare baseline', 'Window timing']
+        },
+        {
+          id: 'risk',
+          label: 'Delay Risk',
+          status: modules.delayRisk?.riskLevel || 'Low',
+          value: modules.delayRisk?.recommendation || 'Route risk stable',
+          detail: `Risk score ${modules.delayRisk?.riskScore ?? '-'}`,
+          tone: modules.delayRisk?.riskLevel === 'high' ? 'red' : modules.delayRisk?.riskLevel === 'medium' ? 'amber' : 'blue',
+          confidence: `${Math.round((modules.delayRisk?.confidence || 0.72) * 100)}%`,
+          updatedAt: now,
+          evidence: modules.delayRisk?.signalsUsed?.slice(0, 3) || ['Traffic', 'Weather', 'Route risk']
+        }
+      ]);
+
+      setPlans([
+        {
+          id: 'book_cheapest',
+          scenario: 'Budget lock',
+          impact: `Target at or below KES ${Math.round((modules.pricing?.predictedPrice || avgPrice) * 0.95).toLocaleString()}`,
+          risk: modules.pricing?.demandLevel === 'high' ? 'Medium risk' : 'Low risk',
+          eta: 'Now',
+          action: modules.pricing?.cheaperWindowSuggestion || 'Filter to lower fare trips and confirm quickly.',
+          tone: 'green'
+        },
+        {
+          id: 'faster_trip',
+          scenario: 'Time priority',
+          impact: 'Cut estimated travel time by selecting top reliability trips',
+          risk: modules.delayRisk?.riskLevel === 'high' ? 'High risk' : 'Medium risk',
+          eta: 'Next departure',
+          action: modules.delayRisk?.recommendation || 'Prioritize trips with lower route risk.',
+          tone: modules.delayRisk?.riskLevel === 'high' ? 'red' : 'amber'
+        },
+        {
+          id: 'seat_secure',
+          scenario: 'Seat security',
+          impact: 'Reduce chance of sell-out during demand spike',
+          risk: 'Medium risk',
+          eta: 'Immediate',
+          action: 'Focus on departures with fewer seats left and book immediately.',
+          tone: 'blue'
+        }
+      ]);
     };
 
     loadTrips();
-    loadAi();
 
     return () => {
       mounted = false;
     };
-  }, [origin, destination, date, time, tripType]);
+  }, [origin, destination, date, time, tripType, maxPrice]);
 
   const filteredBuses = items.filter(b => {
     const matchesSacco = b.sacco.toLowerCase().includes(searchSacco.toLowerCase());
@@ -87,6 +178,32 @@ export default function Results() {
     const matchesClass = !selectedClass || b.classes.includes(selectedClass);
     return matchesSacco && matchesPrice && matchesClass;
   });
+
+  const runPlan = (plan) => {
+    if (plan.id === 'book_cheapest') {
+      const cheapest = Math.min(...items.map((item) => item.priceNum));
+      if (Number.isFinite(cheapest)) {
+        setMaxPrice(cheapest);
+        setSelectedClass('Economy');
+      }
+      showToast('Budget lock plan applied');
+      return;
+    }
+
+    if (plan.id === 'faster_trip') {
+      setSelectedClass('Business');
+      showToast('Time-priority plan applied');
+      return;
+    }
+
+    if (plan.id === 'seat_secure') {
+      const scarce = items.find((item) => item.seats <= 5);
+      if (scarce) {
+        navigate('/user/seat', { state: { selectedTrip: scarce.apiTrip || scarce, from: origin, to: destination, date } });
+      }
+      showToast('Seat-security plan executed');
+    }
+  };
 
   return (
     <div>
@@ -112,6 +229,8 @@ export default function Results() {
         </div>
 
         <AiBanner text={aiText} />
+        <AiDecisionGrid title="Autonomous Booking Decisions" decisions={decisions} />
+        <AiPlanningBoard title="User Smart Planning" plans={plans} onRunPlan={runPlan} />
         
         <div style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: 12, padding: 16, marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--gray-700)' }}>Filter trips</div>

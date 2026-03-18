@@ -169,6 +169,34 @@ export function AiDecisionGrid({ title = 'Autonomous AI Decisions', decisions = 
   );
 }
 
+export function AiPlanningBoard({ title = 'Smart Planning Board', plans = [], onRunPlan }) {
+  return (
+    <div className="card" style={{ marginBottom: 20 }}>
+      <div className="card-title">{title}</div>
+      <div className="ai-plan-grid">
+        {plans.map((plan) => (
+          <div key={plan.id || plan.scenario} className="ai-plan-card">
+            <div className="ai-plan-scenario">{plan.scenario}</div>
+            <div className="ai-plan-impact">{plan.impact}</div>
+            <div className="ai-plan-meta">
+              <span className={`ai-pill ${plan.tone || 'blue'}`}>{plan.risk || 'Medium risk'}</span>
+              <span>{plan.eta || 'ETA n/a'}</span>
+            </div>
+            <div className="ai-plan-action">{plan.action}</div>
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={() => onRunPlan?.(plan)}
+              disabled={!onRunPlan}
+            >
+              Run plan
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ---- METRIC ----
 export function Metric({ label, value, sub, neg }) {
   return (
