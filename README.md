@@ -1,115 +1,204 @@
-# Safari_Connect
+# SafiriConnect — Kenya's AI-Powered Transport Platform
 
-This repository contains both the Frontend (React + Vite) and Backend (Node.js + Prisma) for the Safari_Connect platform.
+> Built for the **AI for Autonomous Decision Making** Hackathon
+> Full-stack platform: React + TypeScript frontend · Node.js + Prisma backend
 
 ---
 
-## 🎨 Frontend (SafiriConnect-React)
+## Repository Structure
+
+```
+Safari_Connect/
+├── frontend/                   ← React + TypeScript + Vite (this document)
+├── transport-booking-backend/  ← Node.js + Prisma + PostgreSQL
+└── ai agent/                   ← AI autonomous decision engine
+```
+
+---
+
+## 🎨 Frontend — SafiriConnect Web App
+
+A professional, role-based transport management web application built with React 19, TypeScript, and Vite. No external UI library — fully custom CSS design system.
+
+### Features
+
+#### 🤖 AI Autonomous Decision Engine (Frontend Integration)
+The platform surfaces real-time AI decisions across all role dashboards:
+
+| Agent | What it does |
+|---|---|
+| **Trip Recommendation** | Ranks trips by price, travel time & reliability — returns top pick |
+| **Dynamic Pricing Insight** | Forecasts fare movement from demand window — suggests cheaper slots |
+| **Delay Risk Prediction** | Scores route risk from weather & traffic — returns risk level + guidance |
+| **Fraud / Anomaly Scoring** | Screens booking/payment behaviour — returns allow / review / block |
+| **Dispatch Planner** | Estimates seat pressure before departure — recommends standby vehicles |
+| **Unified Decision Assist** | Combines all agents into one orchestrated response with top action |
+| **Voice / Chat Assistant** | English + Swahili bilingual intent interpreter |
+
+#### 🧑‍💼 Role-Based Access
+Three fully separated portals with dedicated dashboards, navigation, and permissions:
+
+| Role | Access | Key pages |
+|---|---|---|
+| **Passenger** | `/passenger/*` | Home, Search, Seat selection, My bookings, Profile |
+| **SACCO Owner** | `/owner/*` | Dashboard, Fleet, Routes, Schedules, Analytics, Payments |
+| **Super Admin** | `/admin/*` | Platform overview, SACCOs, Users, Bookings, Fraud, Analytics |
+
+#### ✈️ Airline-Style Seat Selection
+- 3-column layout: Class picker · Bus seat map · Booking summary
+- Visual class zone banners (VIP 👑 / Business 💼 / Economy 🎫)
+- Seats outside selected class are dimmed
+- Row numbers + column labels (A B | C D) with aisle indicator
+- Live seat availability count per class
+
+#### Other Highlights
+- Live AI decision cards with confidence bars on every dashboard
+- Dark sidebar navigation with role pill, breadcrumb trail
+- Topbar with global search, notifications, user avatar
+- M-Pesa payment flow with STK push simulation
+- E-ticket generation with QR placeholder
+- Carrier services: Package delivery, Movers, Document courier
+- Password show/hide toggle on all auth forms
+- Profile page with trust score SVG ring, Help & Support, About section
+
+---
+
+### Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | React 19 + TypeScript |
+| Build tool | Vite 8 |
+| Routing | React Router v7 |
+| State | Context API (AuthContext, BookingContext) |
+| Styling | Custom CSS (no Tailwind, no UI library) |
+| Fonts | DM Sans + Syne (Google Fonts) |
+
+---
 
 ### Quick Start
 
 ```bash
-cd safiriconnect-react
+cd frontend
 npm install
 npm run dev
 ```
 
-Then open [http://localhost:5173](http://localhost:5173)
+Open [http://localhost:5173](http://localhost:5173)
 
-### How to use
+> **Demo accounts** — on the login screen click any demo button to instantly access each role without filling in credentials.
 
-On the login screen, click one of the **demo account buttons** to instantly access each role:
-- 👤 **Demo Passenger** → Full booking flow
-- 🏢 **Demo SACCO Owner** → Fleet & operations dashboard  
-- 🛡️ **Demo Super Admin** → Platform governance
+| Demo | Role | What you see |
+|---|---|---|
+| Demo Passenger | Passenger | Full booking flow, seat map, AI travel assistant |
+| Demo SACCO Owner | Owner | Fleet dashboard, dispatch AI, revenue analytics |
+| Demo Super Admin | Admin | Platform overview, fraud AI, SACCO management |
 
-### Tech Stack
-- React 18 + Vite
-- React Router v6 (role-based routing)
-- Context API for auth state
-- Pure CSS (no UI library — all custom)
+---
 
 ### Project Structure
+
 ```
-src/
-├── context/AuthContext.jsx    ← Role-based auth (user/owner/admin)
-├── components/
-│   ├── UI.jsx                 ← Shared components (Modal, Badge, SeatMap, Charts...)
-│   ├── Topbar.jsx
-│   ├── Sidebar.jsx            ← Role-specific nav
-│   └── ProtectedLayout.jsx    ← Auth guard + layout
-├── pages/
-│   ├── Login.jsx
-│   ├── user/     (8 pages)    ← Passenger flow
-│   ├── owner/    (10 pages)   ← SACCO operations
-│   └── admin/    (9 pages)    ← Super admin
-├── styles/globals.css
-├── App.jsx                    ← All routes
+frontend/
+├── index.html
+├── vite.config.ts
+├── tsconfig.json
+└── src/
+    ├── App.tsx                     ← All routes (public + role-protected)
+    ├── main.tsx                    ← Entry point
+    ├── styles/
+    │   └── globals.css             ← Full custom CSS design system
+    ├── types/
+    │   └── index.ts                ← TypeScript interfaces
+    ├── context/
+    │   ├── AuthContext.tsx         ← Role-based auth (passenger / owner / admin)
+    │   └── BookingContext.tsx      ← Multi-step booking state machine
+    ├── hooks/
+    │   └── useToast.tsx            ← Toast notification hook
+    ├── components/
+    │   ├── DashboardLayout.tsx     ← Sidebar + topbar + breadcrumb shell
+    │   ├── RequireAuth.tsx         ← Route guard by role
+    │   └── UI.tsx                  ← Shared: SeatMap, AiAgentPanel, StatTile,
+    │                                   Modal, Steps, Badge, Charts, MapEmbed
+    └── pages/
+        ├── Welcome.tsx             ← Landing page (SaaS-style)
+        ├── auth/
+        │   ├── Login.tsx
+        │   └── Register.tsx
+        ├── passenger/              ← 8 pages (Home → Search → Seat → Confirm → Payment → Ticket)
+        ├── carrier/                ← 5 pages (Package, Movers, Courier, Tracking)
+        ├── owner/                  ← 10 pages (Fleet, Routes, Schedules, Analytics…)
+        └── admin/                  ← 9 pages (SACCOs, Users, Bookings, Support…)
 ```
 
 ---
 
-## ⚙️ Backend (Safari_Connect Backend)
-
-### Project setup
+### Available Scripts
 
 ```bash
-cd backend
+npm run dev      # Start dev server (hot reload)
+npm run build    # TypeScript check + production build
+npm run preview  # Preview production build locally
+npm run lint     # ESLint
 ```
 
-### 1. Install Dependencies
+---
+
+## ⚙️ Backend — transport-booking-backend
+
+### Setup
 
 ```bash
+cd transport-booking-backend
 npm install
 ```
 
-### 2. Environment Setup
-
-Create a `.env` file in the root directory:
+Create `.env`:
 ```
-DATABASE_URL="postgresql://Database_name:your_secure_password@localhost:5432/Safari_connect"
+DATABASE_URL="postgresql://username:password@localhost:5432/safari_connect"
 JWT_SECRET="your_super_secret_key"
-PORT=xxxx
+PORT=3000
 ```
 
-### 3. Database
-
-1. Download and Install PostgreSQL locally.
-2. Create database:
-   ```sql
-   CREATE DATABASE Safari_Connect;
-   CREATE USER Safari_Connect WITH PASSWORD 'your_secure_password';
-   GRANT ALL PRIVILEGES ON DATABASE Safari_Connect TO Safari_Connect;
-   ```
-
-### 4. Database Migrations
+### Database (PostgreSQL + Prisma)
 
 ```bash
-# Generate Prisma client
 npx prisma generate
-
-# Run database migrations
 npx prisma migrate dev --name init
-
-# Seed database (optional)
-npx prisma db seed
-
-# View database in Prisma Studio
-npx prisma studio
+npx prisma db seed        # optional
+npx prisma studio         # visual DB browser
 ```
 
-### 5. Running the Application
+### Run
 
 ```bash
-# Development mode with hot reload
-npm run start:dev
-
-# Production mode
-npm run start:prod
+npm run start:dev    # development (hot reload)
+npm run start:prod   # production
 ```
 
 ---
 
-## 🚀 Deployment & Collaboration
+## 🤖 AI Agent — ai agent/
 
-For detailed instructions on creating features, ngrok setup, and M-Pesa integration, please see the backend documentation sections.
+Autonomous decision engine implementing:
+- Trip recommendation & ranking
+- Dynamic fare forecasting
+- Delay risk scoring
+- Fraud / anomaly detection
+- Dispatch planning
+- Unified orchestration (all agents in one response)
+- Chat + Voice assistant (English & Swahili)
+
+See `ai agent/` directory for setup and API documentation.
+
+---
+
+## 🚀 Deployment
+
+The frontend builds to a static bundle (`npm run build → dist/`) deployable to any static host (Vercel, Netlify, GitHub Pages).
+
+The backend requires a Node.js runtime and PostgreSQL database.
+
+---
+
+*SafiriConnect — Hackathon submission · AI for Autonomous Decision Making · 2026*
