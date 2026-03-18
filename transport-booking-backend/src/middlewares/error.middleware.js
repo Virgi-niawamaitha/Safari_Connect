@@ -12,7 +12,9 @@ export const errorHandler = (error, req, res, next) => {
     });
   }
 
-  return res.status(400).json({
+  const statusCode = Number(error?.statusCode || 400);
+
+  return res.status(statusCode).json({
     success: false,
     message: error.message || "Internal server error",
   });
