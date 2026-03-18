@@ -29,6 +29,7 @@ This folder contains only the AI-agent scope (Node.js), not the full platform UI
 6. Voice assistant (English + Swahili)
 - Accepts transcript input and returns TTS-ready response text.
 - Supports bilingual interaction for local accessibility.
+- Can return premium cloud audio (`audioBase64`) when TTS provider is configured.
 
 7. Operations dispatch planner
 - Estimates seat pressure and route risk before departure.
@@ -111,6 +112,12 @@ Copy from .env.example and set values:
 - DEFAULT_LANGUAGE
 - SUPPORTED_LANGUAGES
 - VOICE_PROVIDER
+- TTS_PROVIDER
+- ELEVENLABS_API_KEY
+- ELEVENLABS_BASE_URL
+- ELEVENLABS_MODEL
+- ELEVENLABS_VOICE_EN
+- ELEVENLABS_VOICE_SW
 
 ## Quick Start
 

@@ -41,7 +41,7 @@ module.exports = {
       path: "/v1/voice/respond",
       method: "POST",
       input: ["transcript", "language"],
-      output: ["replyText", "ttsVoice", "source", "modelUsed", "disclaimer", "inputMode", "outputMode", "note", "meta"]
+      output: ["replyText", "ttsVoice", "ttsProvider", "audioBase64", "audioMimeType", "source", "modelUsed", "disclaimer", "inputMode", "outputMode", "note", "meta"]
     },
     {
       path: "/v1/decision/assist",

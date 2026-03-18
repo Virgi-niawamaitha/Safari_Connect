@@ -34,6 +34,7 @@ export const api = {
   register: (payload) => request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   me: () => request('/auth/me'),
   aiChat: (payload) => request('/ai/chat', { method: 'POST', body: JSON.stringify(payload) }),
+  aiVoice: (payload) => request('/ai/voice', { method: 'POST', body: JSON.stringify(payload) }),
   aiAssist: (payload) => request('/ai/assist', { method: 'POST', body: JSON.stringify(payload) }),
   tripSearch: (params = {}) => {
     const query = new URLSearchParams(params).toString();
