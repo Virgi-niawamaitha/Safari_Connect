@@ -539,6 +539,37 @@ body {
   gap: 12px;
 }
 
+.ai-decision-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-autopilot-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-autopilot-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.ai-autopilot-select {
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .ai-decision-card {
   border: 1px solid var(--gray-200);
   border-radius: 12px;
@@ -601,6 +632,102 @@ body {
   font-size: 12px;
   color: var(--gray-500);
   line-height: 1.5;
+}
+
+.ai-decision-provenance {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--gray-400);
+}
+
+.ai-evidence-row {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-evidence-pill {
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 10px;
+  color: var(--gray-600);
+  font-weight: 600;
+}
+
+.ai-decision-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.ai-timeline {
+  margin-top: 14px;
+  border-top: 1px solid var(--gray-100);
+  padding-top: 10px;
+}
+
+.ai-timeline-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gray-700);
+  margin-bottom: 8px;
+}
+
+.ai-timeline-empty {
+  font-size: 12px;
+  color: var(--gray-400);
+}
+
+.ai-timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--gray-100);
+}
+
+.ai-timeline-item:last-child {
+  border-bottom: none;
+}
+
+.ai-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ai-dot.green {
+  background: var(--green);
+}
+
+.ai-dot.amber {
+  background: var(--amber);
+}
+
+.ai-dot.red {
+  background: var(--red);
+}
+
+.ai-dot.blue {
+  background: var(--blue);
+}
+
+.ai-timeline-text {
+  color: var(--gray-700);
+}
+
+.ai-timeline-time {
+  margin-left: auto;
+  color: var(--gray-400);
+  font-size: 11px;
 }
 
 /* SEPARATOR */

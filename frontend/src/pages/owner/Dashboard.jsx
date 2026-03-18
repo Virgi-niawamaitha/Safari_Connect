@@ -8,28 +8,68 @@ export default function OwnerDashboard() {
   const [aiText, setAiText] = useState('<strong>Friday Nakuru route will be 96% full.</strong> Deploy extra vehicle by Thursday. Projected extra revenue: KES 42,500. Dynamic pricing raised fares 24% — zero cancellations.');
   const [aiAction, setAiAction] = useState(() => () => navigate('/owner/fleet'));
   const [decisions, setDecisions] = useState([
-    { id: 'dispatch', label: 'Dispatch', status: 'Standby', value: 'Add one standby bus on Nakuru line', detail: 'Projected occupancy above 92%', tone: 'amber' },
-    { id: 'pricing', label: 'Pricing', status: 'Surge', value: 'Increase fare by 6-8% for evening slot', detail: 'High demand with low cancellation risk', tone: 'green' },
-    { id: 'risk', label: 'Delay Risk', status: 'Monitor', value: 'Traffic risk medium after 6 PM', detail: 'Shift departure window by 10 minutes', tone: 'blue' }
+    {
+      id: 'dispatch',
+      label: 'Dispatch',
+      status: 'Standby',
+      value: 'Add one standby bus on Nakuru line',
+      detail: 'Projected occupancy above 92%',
+      tone: 'amber',
+      confidence: '86%',
+      updatedAt: 'now',
+      evidence: ['Live occupancy', 'Trip demand', 'No-show baseline']
+    },
+    {
+      id: 'pricing',
+      label: 'Pricing',
+      status: 'Surge',
+      value: 'Increase fare by 6-8% for evening slot',
+      detail: 'High demand with low cancellation risk',
+      tone: 'green',
+      confidence: '78%',
+      updatedAt: 'now',
+      evidence: ['Fare baseline', 'Demand trend', 'Booking speed']
+    },
+    {
+      id: 'risk',
+      label: 'Delay Risk',
+      status: 'Monitor',
+      value: 'Traffic risk medium after 6 PM',
+      detail: 'Shift departure window by 10 minutes',
+      tone: 'blue',
+      confidence: '73%',
+      updatedAt: 'now',
+      evidence: ['Traffic pressure', 'Route variance', 'Weather input']
+    }
   ]);
 
   useEffect(() => {
     let mounted = true;
 
     const loadOpsBrief = async () => {
+      const tripsResponse = await requestSafe('/trips/me');
+      const liveTrips = tripsResponse?.data || [];
+      const totalSeats = liveTrips.reduce((sum, trip) => sum + Number(trip.bus?.seatCapacity || 0), 0);
+      const bookedSeats = liveTrips.reduce((sum, trip) => sum + Number(trip.bookedSeats || 0), 0);
+      const avgFare = liveTrips.length
+        ? liveTrips.reduce((sum, trip) => sum + Number(trip.basePrice || 0), 0) / liveTrips.length
+        : 1050;
+
       const response = await requestSafe('/ai/assist', {
         method: 'POST',
         body: JSON.stringify({
           route: 'Nairobi-Nakuru',
           departureTime: new Date().toISOString(),
-          currentPrice: 1050,
-          totalSeats: 50,
-          bookedSeats: 44,
+          currentPrice: Math.round(avgFare || 1050),
+          totalSeats: totalSeats || 50,
+          bookedSeats: bookedSeats || 44,
           noShowRate: 0.08,
-          trips: [
-            { id: 'TRIP-1', price: 1050, travelMinutes: 210, reliabilityScore: 0.86 },
-            { id: 'TRIP-2', price: 900, travelMinutes: 230, reliabilityScore: 0.79 }
-          ],
+          trips: liveTrips.slice(0, 10).map((trip) => ({
+            id: trip.id,
+            price: Number(trip.basePrice || 0),
+            travelMinutes: Number(trip.route?.estimatedTime || 240),
+            reliabilityScore: Number(trip.availableSeats || 0) < 5 ? 0.74 : 0.87
+          })),
           intent: { maxBudget: 1200, maxTravelMinutes: 240 },
           riskFactors: { weatherRisk: 0.2, trafficRisk: 0.58, routeRisk: 0.26 },
           fraudSignals: { attemptsLast24h: 0, cardMismatch: false, rapidRetries: 0, geoMismatch: false },
@@ -66,7 +106,10 @@ export default function OwnerDashboard() {
           status: operations?.action === 'add_vehicle' ? 'Scale Up' : 'Stable',
           value: operations?.dispatchAdvice || 'No dispatch changes required',
           detail: `Demand ${operations?.demandLevel || '-'} · Occupancy ${Math.round((operations?.occupancyRate || 0) * 100)}%`,
-          tone: operations?.action === 'add_vehicle' ? 'amber' : 'green'
+          tone: operations?.action === 'add_vehicle' ? 'amber' : 'green',
+          confidence: `${Math.round((operations?.confidence || 0.82) * 100)}%`,
+          updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          evidence: operations?.signalsUsed?.slice(0, 3) || ['Occupancy', 'No-show rate', 'Route pressure']
         },
         {
           id: 'pricing',
@@ -74,7 +117,10 @@ export default function OwnerDashboard() {
           status: response?.data?.modules?.pricing?.demandLevel || 'Normal',
           value: `Predicted KES ${Math.round(Number(response?.data?.modules?.pricing?.predictedPrice || 0)).toLocaleString()}`,
           detail: response?.data?.modules?.pricing?.cheaperWindowSuggestion || 'No better window detected',
-          tone: response?.data?.modules?.pricing?.demandLevel === 'high' ? 'amber' : 'green'
+          tone: response?.data?.modules?.pricing?.demandLevel === 'high' ? 'amber' : 'green',
+          confidence: `${Math.round((response?.data?.modules?.pricing?.confidence || 0.76) * 100)}%`,
+          updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          evidence: response?.data?.modules?.pricing?.signalsUsed?.slice(0, 3) || ['Demand index', 'Price trend', 'Travel window']
         },
         {
           id: 'risk',
@@ -82,7 +128,10 @@ export default function OwnerDashboard() {
           status: response?.data?.modules?.delayRisk?.riskLevel || 'Low',
           value: response?.data?.modules?.delayRisk?.recommendation || 'Routes stable',
           detail: `Risk score ${response?.data?.modules?.delayRisk?.riskScore ?? '-'}`,
-          tone: response?.data?.modules?.delayRisk?.riskLevel === 'high' ? 'red' : response?.data?.modules?.delayRisk?.riskLevel === 'medium' ? 'amber' : 'blue'
+          tone: response?.data?.modules?.delayRisk?.riskLevel === 'high' ? 'red' : response?.data?.modules?.delayRisk?.riskLevel === 'medium' ? 'amber' : 'blue',
+          confidence: `${Math.round((response?.data?.modules?.delayRisk?.confidence || 0.72) * 100)}%`,
+          updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          evidence: response?.data?.modules?.delayRisk?.signalsUsed?.slice(0, 3) || ['Traffic', 'Weather', 'Route risk']
         }
       ]);
     };

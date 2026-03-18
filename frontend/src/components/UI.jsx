@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { setToastHandler, showToast } from './toast';
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -53,20 +53,117 @@ export function AiBanner({ text, action }) {
 
 // ---- AUTONOMOUS DECISION GRID ----
 export function AiDecisionGrid({ title = 'Autonomous AI Decisions', decisions = [] }) {
+  const [autopilotMode, setAutopilotMode] = useState('human_approve');
+  const [appliedMap, setAppliedMap] = useState({});
+  const [history, setHistory] = useState([]);
+
+  const recordHistory = (text, tone = 'blue') => {
+    setHistory((prev) => [
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        text,
+        tone,
+        at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      },
+      ...prev
+    ].slice(0, 8));
+  };
+
+  const applyDecision = useCallback((decision, source = 'manual') => {
+    if (autopilotMode === 'suggest_only' && source !== 'auto') {
+      showToast('Autopilot is in Suggest only mode', 'warning');
+      recordHistory(`Suggestion reviewed: ${decision.label}`, 'amber');
+      return;
+    }
+
+    setAppliedMap((prev) => ({ ...prev, [decision.id || decision.label]: true }));
+    showToast(`${decision.label} applied`, 'success');
+    recordHistory(`Applied ${decision.label}${source === 'auto' ? ' automatically' : ''}`, 'green');
+  }, [autopilotMode]);
+
+  const rollbackDecision = useCallback((decision) => {
+    setAppliedMap((prev) => ({ ...prev, [decision.id || decision.label]: false }));
+    showToast(`${decision.label} rolled back`, 'warning');
+    recordHistory(`Rolled back ${decision.label}`, 'amber');
+  }, []);
+
+  useEffect(() => {
+    if (autopilotMode !== 'auto_apply') return;
+    const nextDecision = decisions.find((decision) => !appliedMap[decision.id || decision.label]);
+    if (!nextDecision) return;
+
+    const timer = setTimeout(() => applyDecision(nextDecision, 'auto'), 450);
+    return () => clearTimeout(timer);
+  }, [autopilotMode, decisions, appliedMap, applyDecision]);
+
   return (
     <div className="card" style={{ marginBottom: 20 }}>
-      <div className="card-title">{title}</div>
+      <div className="ai-decision-topbar">
+        <div className="card-title" style={{ marginBottom: 0 }}>{title}</div>
+        <div className="ai-autopilot-wrap">
+          <span className="ai-autopilot-label">Autopilot</span>
+          <select className="ai-autopilot-select" value={autopilotMode} onChange={(event) => setAutopilotMode(event.target.value)}>
+            <option value="suggest_only">Suggest only</option>
+            <option value="human_approve">Human approve</option>
+            <option value="auto_apply">Auto apply</option>
+          </select>
+        </div>
+      </div>
+
       <div className="ai-decision-grid">
         {decisions.map((decision) => (
           <div key={decision.id || decision.label} className="ai-decision-card">
             <div className="ai-decision-head">
               <span className="ai-decision-label">{decision.label}</span>
-              <span className={`ai-pill ${decision.tone || 'blue'}`}>{decision.status}</span>
+              <span className={`ai-pill ${appliedMap[decision.id || decision.label] ? 'green' : (decision.tone || 'blue')}`}>
+                {appliedMap[decision.id || decision.label] ? 'Applied' : decision.status}
+              </span>
             </div>
             <div className="ai-decision-value">{decision.value}</div>
             {decision.detail && <div className="ai-decision-detail">{decision.detail}</div>}
+
+            <div className="ai-decision-provenance">
+              <span>Confidence: {decision.confidence || 'n/a'}</span>
+              <span>Updated: {decision.updatedAt || 'now'}</span>
+            </div>
+
+            {Array.isArray(decision.evidence) && decision.evidence.length > 0 && (
+              <div className="ai-evidence-row">
+                {decision.evidence.slice(0, 3).map((signal) => (
+                  <span key={signal} className="ai-evidence-pill">{signal}</span>
+                ))}
+              </div>
+            )}
+
+            <div className="ai-decision-actions">
+              <button className="btn btn-sm btn-primary" onClick={() => applyDecision(decision)}>
+                {decision.actionLabel || 'Apply'}
+              </button>
+              <button
+                className="btn btn-sm"
+                onClick={() => rollbackDecision(decision)}
+                disabled={!appliedMap[decision.id || decision.label]}
+              >
+                {decision.rollbackLabel || 'Rollback'}
+              </button>
+            </div>
           </div>
         ))}
+      </div>
+
+      <div className="ai-timeline">
+        <div className="ai-timeline-title">Decision history</div>
+        {history.length === 0 ? (
+          <div className="ai-timeline-empty">No autonomous actions yet.</div>
+        ) : (
+          history.map((entry) => (
+            <div key={entry.id} className="ai-timeline-item">
+              <span className={`ai-dot ${entry.tone}`}></span>
+              <span className="ai-timeline-text">{entry.text}</span>
+              <span className="ai-timeline-time">{entry.at}</span>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

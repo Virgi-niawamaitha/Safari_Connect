@@ -6,9 +6,39 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [aiText, setAiText] = useState('<strong>Platform autonomous guardrails active.</strong> AI is continuously balancing fraud prevention, trip reliability, and pricing fairness.');
   const [decisions, setDecisions] = useState([
-    { id: 'fraud', label: 'Fraud Watch', status: 'Auto-Hold', value: '3 risky transactions blocked', detail: 'Rapid retries and card mismatch patterns', tone: 'red' },
-    { id: 'ops', label: 'Operations', status: 'Rebalance', value: '2 routes need standby buses', detail: 'Forecasted occupancy above 92%', tone: 'amber' },
-    { id: 'pricing', label: 'Pricing AI', status: 'Live', value: '14 routes dynamically priced', detail: 'Demand surge managed without cancelation spike', tone: 'green' }
+    {
+      id: 'fraud',
+      label: 'Fraud Watch',
+      status: 'Auto-Hold',
+      value: '3 risky transactions blocked',
+      detail: 'Rapid retries and card mismatch patterns',
+      tone: 'red',
+      confidence: '88%',
+      updatedAt: 'now',
+      evidence: ['Retry burst', 'Geo mismatch', 'Card mismatch']
+    },
+    {
+      id: 'ops',
+      label: 'Operations',
+      status: 'Rebalance',
+      value: '2 routes need standby buses',
+      detail: 'Forecasted occupancy above 92%',
+      tone: 'amber',
+      confidence: '82%',
+      updatedAt: 'now',
+      evidence: ['Seat pressure', 'Peak-hour demand', 'Route ETA variance']
+    },
+    {
+      id: 'pricing',
+      label: 'Pricing AI',
+      status: 'Live',
+      value: '14 routes dynamically priced',
+      detail: 'Demand surge managed without cancelation spike',
+      tone: 'green',
+      confidence: '79%',
+      updatedAt: 'now',
+      evidence: ['Fare trend', 'Booking velocity', 'Cancellation delta']
+    }
   ]);
   const routes = [{l:'NBI→Mombasa',pct:100,v:'348'},{l:'NBI→Nakuru',pct:84,v:'292'},{l:'NBI→Kisumu',pct:61,v:'211'},{l:'NBI→Eldoret',pct:54,v:'187'}];
 
@@ -16,22 +46,52 @@ export default function AdminDashboard() {
     let mounted = true;
 
     const loadPlatformAi = async () => {
+      const routePairs = [
+        ['Nairobi', 'Mombasa'],
+        ['Nairobi', 'Nakuru'],
+        ['Nairobi', 'Kisumu'],
+        ['Nairobi', 'Eldoret']
+      ];
+
+      const snapshots = await Promise.all(
+        routePairs.map(([origin, destination]) => requestSafe(`/trips/search?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`))
+      );
+
+      const allTrips = snapshots
+        .flatMap((item) => item?.data || [])
+        .filter(Boolean);
+
+      const avgPrice = allTrips.length
+        ? allTrips.reduce((sum, trip) => sum + Number(trip.basePrice || 0), 0) / allTrips.length
+        : 1200;
+      const totalSeats = allTrips.reduce((sum, trip) => sum + Number(trip.bus?.seatCapacity || 0), 0);
+      const availableSeats = allTrips.reduce((sum, trip) => sum + Number(trip.availableSeatsCount || 0), 0);
+      const bookedSeats = Math.max(totalSeats - availableSeats, 0);
+      const lowSeatTrips = allTrips.filter((trip) => Number(trip.availableSeatsCount || 0) < 6).length;
+
       const response = await requestSafe('/ai/assist', {
         method: 'POST',
         body: JSON.stringify({
           route: 'Platform-Wide',
           departureTime: new Date().toISOString(),
-          currentPrice: 1200,
-          totalSeats: 1800,
-          bookedSeats: 1520,
+          currentPrice: Math.round(avgPrice || 1200),
+          totalSeats: totalSeats || 1800,
+          bookedSeats: bookedSeats || 1520,
           noShowRate: 0.09,
-          trips: [
-            { id: 'PLAT-1', price: 1100, travelMinutes: 220, reliabilityScore: 0.88 },
-            { id: 'PLAT-2', price: 980, travelMinutes: 260, reliabilityScore: 0.76 }
-          ],
+          trips: allTrips.slice(0, 12).map((trip) => ({
+            id: trip.id,
+            price: Number(trip.basePrice || 0),
+            travelMinutes: Number(trip.route?.estimatedTime || 240),
+            reliabilityScore: Number(trip.availableSeatsCount || 0) < 5 ? 0.72 : 0.88
+          })),
           intent: { maxBudget: 1400, maxTravelMinutes: 320 },
           riskFactors: { weatherRisk: 0.24, trafficRisk: 0.61, routeRisk: 0.37 },
-          fraudSignals: { attemptsLast24h: 7, cardMismatch: true, rapidRetries: 4, geoMismatch: true },
+          fraudSignals: {
+            attemptsLast24h: Math.max(lowSeatTrips, 2),
+            cardMismatch: lowSeatTrips > 1,
+            rapidRetries: Math.min(lowSeatTrips, 5),
+            geoMismatch: lowSeatTrips > 2
+          },
           prompt: 'Give one short autonomous platform summary for admin operators.',
           language: 'en'
         })
@@ -52,7 +112,10 @@ export default function AdminDashboard() {
           status: modules.fraud?.decision === 'block' ? 'Block' : modules.fraud?.decision === 'review' ? 'Review' : 'Allow',
           value: `Risk score ${modules.fraud?.fraudScore ?? '-'}`,
           detail: modules.fraud?.reason || 'Live fraud policy running',
-          tone: modules.fraud?.decision === 'block' ? 'red' : modules.fraud?.decision === 'review' ? 'amber' : 'green'
+          tone: modules.fraud?.decision === 'block' ? 'red' : modules.fraud?.decision === 'review' ? 'amber' : 'green',
+          confidence: `${Math.round((modules.fraud?.confidence || 0.8) * 100)}%`,
+          updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          evidence: modules.fraud?.signalsUsed?.slice(0, 3) || ['Retry burst', 'Mismatch signal', 'Geo anomaly']
         },
         {
           id: 'ops',
@@ -60,7 +123,10 @@ export default function AdminDashboard() {
           status: modules.operations?.action === 'add_vehicle' ? 'Scale Up' : 'Stable',
           value: modules.operations?.dispatchAdvice || 'Fleet scheduling is stable',
           detail: `Demand ${modules.operations?.demandLevel || '-'} · Risk ${modules.operations?.riskLevel || '-'}`,
-          tone: modules.operations?.action === 'add_vehicle' ? 'amber' : 'blue'
+          tone: modules.operations?.action === 'add_vehicle' ? 'amber' : 'blue',
+          confidence: `${Math.round((modules.operations?.confidence || 0.78) * 100)}%`,
+          updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          evidence: modules.operations?.signalsUsed?.slice(0, 3) || ['Occupancy pressure', 'Traffic forecast', 'No-show trend']
         },
         {
           id: 'pricing',
@@ -68,7 +134,10 @@ export default function AdminDashboard() {
           status: modules.pricing?.demandLevel || 'Normal',
           value: `Predicted fare KES ${Math.round(Number(modules.pricing?.predictedPrice || 0)).toLocaleString()}`,
           detail: modules.pricing?.cheaperWindowSuggestion || 'No alternative window detected',
-          tone: modules.pricing?.demandLevel === 'high' ? 'amber' : 'green'
+          tone: modules.pricing?.demandLevel === 'high' ? 'amber' : 'green',
+          confidence: `${Math.round((modules.pricing?.confidence || 0.74) * 100)}%`,
+          updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          evidence: modules.pricing?.signalsUsed?.slice(0, 3) || ['Demand level', 'Departure window', 'Route pressure']
         }
       ]);
     };

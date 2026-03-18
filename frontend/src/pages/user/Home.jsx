@@ -13,9 +13,39 @@ export default function UserHome() {
   const [travelTime, setTravelTime] = useState('08:00');
   const [aiText, setAiText] = useState('<strong>Good morning, Jane!</strong> Based on your history, Nairobi → Nakuru is your top route. Next departure in 42 minutes — 14 seats left.');
   const [decisions, setDecisions] = useState([
-    { id: 'best', label: 'Best Trip', status: 'Recommended', value: 'Nairobi → Nakuru 08:00', detail: 'Balanced fare, fastest travel, strong reliability', tone: 'green' },
-    { id: 'price', label: 'Price Timing', status: 'Save', value: 'Book before 7:30 AM to save ~KES 120', detail: 'Demand is rising for morning departures', tone: 'amber' },
-    { id: 'risk', label: 'Trip Risk', status: 'Low', value: 'Delay risk currently low', detail: 'Weather and route risk under threshold', tone: 'blue' }
+    {
+      id: 'best',
+      label: 'Best Trip',
+      status: 'Recommended',
+      value: 'Nairobi → Nakuru 08:00',
+      detail: 'Balanced fare, fastest travel, strong reliability',
+      tone: 'green',
+      confidence: '84%',
+      updatedAt: 'now',
+      evidence: ['Route history', 'Price-fit', 'Reliability score']
+    },
+    {
+      id: 'price',
+      label: 'Price Timing',
+      status: 'Save',
+      value: 'Book before 7:30 AM to save ~KES 120',
+      detail: 'Demand is rising for morning departures',
+      tone: 'amber',
+      confidence: '77%',
+      updatedAt: 'now',
+      evidence: ['Demand trend', 'Time window', 'Fare baseline']
+    },
+    {
+      id: 'risk',
+      label: 'Trip Risk',
+      status: 'Low',
+      value: 'Delay risk currently low',
+      detail: 'Weather and route risk under threshold',
+      tone: 'blue',
+      confidence: '73%',
+      updatedAt: 'now',
+      evidence: ['Traffic index', 'Weather', 'Route risk']
+    }
   ]);
 
   const cats = [
@@ -52,23 +82,42 @@ export default function UserHome() {
     let mounted = true;
 
     const loadAutonomousUserDecision = async () => {
+      const [tripResponse, bookingResponse] = await Promise.all([
+        requestSafe(`/trips/search?origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}`),
+        requestSafe('/bookings/me')
+      ]);
+
+      const liveTrips = tripResponse?.data || [];
+      const myBookings = bookingResponse?.data || [];
+      const avgPrice = liveTrips.length
+        ? liveTrips.reduce((sum, trip) => sum + Number(trip.basePrice || 0), 0) / liveTrips.length
+        : 980;
+      const totalSeats = liveTrips.reduce((sum, trip) => sum + Number(trip.bus?.seatCapacity || 0), 0);
+      const availableSeats = liveTrips.reduce((sum, trip) => sum + Number(trip.availableSeatsCount || 0), 0);
+
       const response = await requestSafe('/ai/assist', {
         method: 'POST',
         body: JSON.stringify({
           route: `${from}-${to}`,
           departureTime: travelDate ? `${travelDate}T${travelTime || '08:00'}:00.000Z` : new Date().toISOString(),
-          currentPrice: 980,
-          totalSeats: 50,
-          bookedSeats: 34,
+          currentPrice: Math.round(avgPrice || 980),
+          totalSeats: totalSeats || 50,
+          bookedSeats: Math.max(totalSeats - availableSeats, 0) || 34,
           noShowRate: 0.1,
-          trips: [
-            { id: 'USER-1', price: 850, travelMinutes: 220, reliabilityScore: 0.82 },
-            { id: 'USER-2', price: 1050, travelMinutes: 195, reliabilityScore: 0.88 },
-            { id: 'USER-3', price: 780, travelMinutes: 245, reliabilityScore: 0.73 }
-          ],
-          intent: { maxBudget: 1200, maxTravelMinutes: 260 },
+          trips: liveTrips.slice(0, 12).map((trip) => ({
+            id: trip.id,
+            price: Number(trip.basePrice || 0),
+            travelMinutes: Number(trip.route?.estimatedTime || 240),
+            reliabilityScore: Number(trip.availableSeatsCount || 0) < 5 ? 0.74 : 0.86
+          })),
+          intent: { maxBudget: 1200, maxTravelMinutes: 260, bookingHistoryCount: myBookings.length },
           riskFactors: { weatherRisk: 0.16, trafficRisk: 0.44, routeRisk: 0.25 },
-          fraudSignals: { attemptsLast24h: 0, cardMismatch: false, rapidRetries: 0, geoMismatch: false },
+          fraudSignals: {
+            attemptsLast24h: Math.min(myBookings.length, 4),
+            cardMismatch: false,
+            rapidRetries: 0,
+            geoMismatch: false
+          },
           prompt: `Recommend the best autonomous travel decision for ${from} to ${to}`,
           language: 'en'
         })
@@ -89,7 +138,10 @@ export default function UserHome() {
           status: modules.recommendation?.topPick ? 'Recommended' : 'Needs Input',
           value: modules.recommendation?.topPick || `${from} → ${to}`,
           detail: modules.recommendation?.rationale || 'Provide date and budget for stronger match',
-          tone: modules.recommendation?.topPick ? 'green' : 'amber'
+          tone: modules.recommendation?.topPick ? 'green' : 'amber',
+          confidence: `${Math.round((modules.recommendation?.confidence || 0.8) * 100)}%`,
+          updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          evidence: modules.recommendation?.signalsUsed?.slice(0, 3) || ['Budget fit', 'Travel duration', 'Reliability']
         },
         {
           id: 'price',
@@ -97,7 +149,10 @@ export default function UserHome() {
           status: modules.pricing?.demandLevel || 'Normal',
           value: `Predicted fare KES ${Math.round(Number(modules.pricing?.predictedPrice || 0)).toLocaleString()}`,
           detail: modules.pricing?.cheaperWindowSuggestion || 'No cheaper window detected',
-          tone: modules.pricing?.demandLevel === 'high' ? 'amber' : 'green'
+          tone: modules.pricing?.demandLevel === 'high' ? 'amber' : 'green',
+          confidence: `${Math.round((modules.pricing?.confidence || 0.76) * 100)}%`,
+          updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          evidence: modules.pricing?.signalsUsed?.slice(0, 3) || ['Demand level', 'Departure window', 'Historic fare']
         },
         {
           id: 'risk',
@@ -105,7 +160,10 @@ export default function UserHome() {
           status: modules.delayRisk?.riskLevel || 'Low',
           value: modules.delayRisk?.recommendation || 'Trip conditions look stable',
           detail: `Risk score ${modules.delayRisk?.riskScore ?? '-'}`,
-          tone: modules.delayRisk?.riskLevel === 'high' ? 'red' : modules.delayRisk?.riskLevel === 'medium' ? 'amber' : 'blue'
+          tone: modules.delayRisk?.riskLevel === 'high' ? 'red' : modules.delayRisk?.riskLevel === 'medium' ? 'amber' : 'blue',
+          confidence: `${Math.round((modules.delayRisk?.confidence || 0.71) * 100)}%`,
+          updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          evidence: modules.delayRisk?.signalsUsed?.slice(0, 3) || ['Traffic', 'Weather', 'Route risk']
         }
       ]);
     };
