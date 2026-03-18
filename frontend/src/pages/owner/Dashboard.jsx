@@ -1,8 +1,67 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AiBanner, Metric, ChartBar } from '../../components/UI';
+import { requestSafe } from '../../lib/api';
 
 export default function OwnerDashboard() {
   const navigate = useNavigate();
+  const [aiText, setAiText] = useState('<strong>Friday Nakuru route will be 96% full.</strong> Deploy extra vehicle by Thursday. Projected extra revenue: KES 42,500. Dynamic pricing raised fares 24% — zero cancellations.');
+  const [aiAction, setAiAction] = useState(() => () => navigate('/owner/fleet'));
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadOpsBrief = async () => {
+      const response = await requestSafe('/ai/assist', {
+        method: 'POST',
+        body: JSON.stringify({
+          route: 'Nairobi-Nakuru',
+          departureTime: new Date().toISOString(),
+          currentPrice: 1050,
+          totalSeats: 50,
+          bookedSeats: 44,
+          noShowRate: 0.08,
+          trips: [
+            { id: 'TRIP-1', price: 1050, travelMinutes: 210, reliabilityScore: 0.86 },
+            { id: 'TRIP-2', price: 900, travelMinutes: 230, reliabilityScore: 0.79 }
+          ],
+          intent: { maxBudget: 1200, maxTravelMinutes: 240 },
+          riskFactors: { weatherRisk: 0.2, trafficRisk: 0.58, routeRisk: 0.26 },
+          fraudSignals: { attemptsLast24h: 0, cardMismatch: false, rapidRetries: 0, geoMismatch: false },
+          prompt: 'Provide one short sacco operations recommendation for today peak routes.',
+          language: 'en'
+        })
+      });
+
+      const topAction = response?.data?.summary?.topAction;
+      const message = response?.data?.summary?.passengerMessage;
+      const operations = response?.data?.modules?.operations;
+      if (!mounted) return;
+
+      if (message || operations?.dispatchAdvice) {
+        const headline = operations?.action === 'add_vehicle'
+          ? '<strong>AI operations alert:</strong> Peak seat pressure detected.'
+          : '<strong>AI operations insight:</strong> Live planning recommendation ready.';
+        const detail = operations?.dispatchAdvice || message;
+        setAiText(`${headline} ${detail}`);
+      }
+
+      if (topAction === 'add_standby_vehicle') {
+        setAiAction(() => () => navigate('/owner/fleet'));
+      } else if (topAction === 'suggest_alternate_schedule') {
+        setAiAction(() => () => navigate('/owner/schedules'));
+      } else {
+        setAiAction(() => () => navigate('/owner/analytics'));
+      }
+    };
+
+    loadOpsBrief();
+
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
+
   const trips = [
     {name:'NBI → Nakuru 8:00 AM · KBZ 123A',status:'green',label:'On route'},
     {name:'NBI → Mombasa 6:00 AM · KCA 456B',status:'green',label:'On route'},
@@ -18,7 +77,7 @@ export default function OwnerDashboard() {
         <div className="page-actions"><button className="btn btn-primary btn-sm" onClick={()=>navigate('/owner/schedules')}>+ Create trip</button></div>
       </div>
       <div className="page-body">
-        <AiBanner text="<strong>Friday Nakuru route will be 96% full.</strong> Deploy extra vehicle by Thursday. Projected extra revenue: KES 42,500. Dynamic pricing raised fares 24% — zero cancellations." action={<button className="btn btn-primary btn-sm" onClick={()=>navigate('/owner/fleet')}>Add vehicle</button>} />
+        <AiBanner text={aiText} action={<button className="btn btn-primary btn-sm" onClick={aiAction}>AI Action →</button>} />
         <div className="metric-grid">
           <Metric label="Trips today" value="8" sub="2 on route now"/>
           <Metric label="Bookings today" value="87" sub="+12% vs yesterday"/>

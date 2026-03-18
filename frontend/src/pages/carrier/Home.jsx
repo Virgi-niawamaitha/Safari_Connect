@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AiBanner } from '../../components/UI';
+import { requestSafe } from '../../lib/api';
 
 const SERVICES = [
   {
@@ -36,6 +38,32 @@ const SERVICES = [
 
 export default function CarrierHome() {
   const navigate = useNavigate();
+  const [aiText, setAiText] = useState('<strong>AI routing active.</strong> Live traffic data from Nairobi roads is being used to optimise delivery times and pricing. Current avg delivery time: 28 minutes.');
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadCarrierHint = async () => {
+      const response = await requestSafe('/ai/chat', {
+        method: 'POST',
+        body: JSON.stringify({
+          text: 'Give one short Nairobi courier operations tip for today including route efficiency and ETA reliability.',
+          language: 'en'
+        })
+      });
+
+      const message = response?.data?.message || response?.message;
+      if (mounted && message) {
+        setAiText(`<strong>AI routing active.</strong> ${message}`);
+      }
+    };
+
+    loadCarrierHint();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <div>
@@ -50,9 +78,7 @@ export default function CarrierHome() {
       </div>
 
       <div className="page-body">
-        <AiBanner
-          text="<strong>AI routing active.</strong> Live traffic data from Nairobi roads is being used to optimise delivery times and pricing. Current avg delivery time: 28 minutes."
-        />
+        <AiBanner text={aiText} />
 
         <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 800, marginBottom: 6 }}>
           What do you need delivered or moved?
