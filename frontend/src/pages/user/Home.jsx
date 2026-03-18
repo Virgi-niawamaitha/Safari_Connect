@@ -32,7 +32,7 @@ export default function UserHome() {
         <div style={{fontSize:13,color:'var(--gray-400)',marginBottom:4}}>Choose a category to search available trips</div>
         <div className="cat-grid">
           {cats.map(c => (
-            <div key={c.id} className={`cat-card${activecat===c.id?' active':''}`} onClick={() => { setActiveCat(c.id); setSearchOpen(true); }}>
+            <div key={c.id} className={`cat-card${activecat===c.id?' active':''}`} onClick={() => { setActiveCat(c.id); c.id === 'carrier' ? navigate('/carrier') : setSearchOpen(true); }}>
               <div className="cat-icon">{c.icon}</div>
               <div className="cat-name">{c.name}</div>
               <div className="cat-desc">{c.desc}</div>
