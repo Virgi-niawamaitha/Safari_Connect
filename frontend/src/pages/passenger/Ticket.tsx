@@ -6,7 +6,12 @@ import { useBooking } from '../../context/BookingContext';
 export default function Ticket() {
   const navigate = useNavigate();
   const { booking, reset } = useBooking();
-  const ref = booking.bookingRef || 'SC-2026-00892';
+  const ref     = booking.bookingRef || 'SC-2026-00892';
+  const route   = booking.selectedBus
+    ? `${booking.searchQuery?.from ?? ''} → ${booking.searchQuery?.to ?? ''}`
+    : 'Nairobi → Nakuru';
+  const depart  = booking.selectedBus?.departureTime ?? '8:00 AM';
+  const arrive  = booking.selectedBus?.arrivalTime   ?? '11:30 AM (estimated)';
 
   return (
     <DashboardLayout title="Booking confirmed 🎉" subtitle="Your e-ticket is ready">
@@ -24,7 +29,7 @@ export default function Ticket() {
         <div className="ticket">
           <div className="ticket-head">
             <div className="ticket-brand">SafiriConnect · E-Ticket</div>
-            <div className="ticket-route">Nairobi → Nakuru</div>
+            <div className="ticket-route">{route}</div>
             <div className="ticket-ref">Ref: {ref}</div>
           </div>
           <div className="ticket-body">
@@ -33,8 +38,8 @@ export default function Ticket() {
               ['ID number',   booking.passenger?.idNumber ?? '23456789'],
               ['SACCO',       booking.selectedBus?.saccoName ?? 'Modern Coast'],
               ['Date',        booking.searchQuery?.date ?? 'Wed 18 Mar 2026'],
-              ['Departure',   '8:00 AM'],
-              ['Arrival',     '11:30 AM (estimated)'],
+              ['Departure',   depart],
+              ['Arrival',     arrive],
               ['Seat',        `${booking.selectedSeat ?? '14B'} · ${booking.seatClass ?? 'Economy'}`],
             ].map(([l, v]) => (
               <div key={l} className="ticket-row">

@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { User, UserRole, LoginPayload, RegisterPayload } from '../types';
+import { authApi, getToken, setToken, clearToken } from '../services/api';
+import type { ApiUser } from '../services/api';
 
 interface AuthContextValue {
   user: User | null;
@@ -12,53 +14,83 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function makeUser(role: UserRole, name: string, email: string): User {
+const mapRole = (role: string): UserRole => {
+  if (role === 'OWNER') return 'owner';
+  if (role === 'ADMIN') return 'admin';
+  return 'passenger';
+};
+
+const mapUser = (apiUser: ApiUser): User => {
+  const name = `${apiUser.firstName} ${apiUser.lastName}`.trim();
   const parts = name.split(' ');
   return {
-    id: crypto.randomUUID(),
+    id: apiUser.id,
     name,
-    email,
-    phone: '0712 345 678',
-    role,
-    initials: parts.map(p => p[0]).join('').toUpperCase().slice(0, 2),
-    idNumber: '23456789',
-    residence: 'Nairobi',
-    trustScore: 94,
+    email: apiUser.email,
+    phone: apiUser.phone ?? '',
+    role: mapRole(apiUser.role),
+    initials: parts.map(p => p[0] ?? '').join('').toUpperCase().slice(0, 2),
+    idNumber: '',
+    residence: '',
+    trustScore: 90,
   };
-}
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser]           = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = useCallback(async ({ email, password: _password, role }: LoginPayload): Promise<User> => {
+  // Rehydrate session from stored token on mount
+  useEffect(() => {
+    const token = getToken();
+    if (!token) { setIsLoading(false); return; }
+    authApi.me()
+      .then(res => setUser(mapUser(res.data)))
+      .catch(() => clearToken())
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const login = useCallback(async ({ email, password }: LoginPayload): Promise<User> => {
     setIsLoading(true);
-    // Simulate API call — replace with real endpoint
-    await new Promise(r => setTimeout(r, 700));
-    const nameMap: Record<UserRole, string> = {
-      passenger: 'Jane Mwangi',
-      owner: 'Modern Coast Sacco',
-      admin: 'Platform Admin',
-    };
-    const u = makeUser(role, nameMap[role], email);
-    setUser(u);
-    setIsLoading(false);
-    return u;
+    try {
+      const res = await authApi.login(email, password);
+      setToken(res.data.token);
+      const u = mapUser(res.data.user);
+      setUser(u);
+      return u;
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   const register = useCallback(async (payload: RegisterPayload): Promise<User> => {
     setIsLoading(true);
-    // Simulate API call — replace with real endpoint
-    await new Promise(r => setTimeout(r, 900));
-    const u = makeUser(payload.role, `${payload.firstName} ${payload.lastName}`, payload.email);
-    u.phone = payload.phone;
-    u.idNumber = payload.idNumber;
-    setUser(u);
-    setIsLoading(false);
-    return u;
+    try {
+      const backendRole =
+        payload.role === 'owner' ? 'OWNER' :
+        payload.role === 'admin' ? 'ADMIN' : 'USER';
+
+      const res = await authApi.register({
+        firstName: payload.firstName,
+        lastName:  payload.lastName,
+        email:     payload.email,
+        phone:     payload.phone || undefined,
+        password:  payload.password,
+        role:      backendRole as 'USER' | 'OWNER' | 'ADMIN',
+      });
+      setToken(res.data.token);
+      const u = mapUser(res.data.user);
+      setUser(u);
+      return u;
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const logout = useCallback(() => setUser(null), []);
+  const logout = useCallback(() => {
+    clearToken();
+    setUser(null);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>

@@ -84,6 +84,10 @@ export interface BookingState {
   passenger: PassengerDetails | null;
   phone: string;
   bookingRef: string;
+  // Backend IDs populated during the booking flow
+  tripId: string;
+  seatId: string;
+  bookingId: string;
 }
 
 // ─── Owner / Fleet ───────────────────────────────────────────────────────────

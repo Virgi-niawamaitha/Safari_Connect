@@ -1,17 +1,42 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import { Steps } from '../../components/UI';
 import { useBooking } from '../../context/BookingContext';
 
-type PayStatus = 'waiting' | 'success' | 'failed';
+type PayStatus = 'initiating' | 'waiting' | 'success' | 'failed';
+
+const POLL_INTERVAL = 4000;   // 4 s
+const EXPIRY_SECS   = 60;
 
 export default function Payment() {
   const navigate = useNavigate();
-  const { booking, confirmBooking } = useBooking();
-  const [status, setStatus] = useState<PayStatus>('waiting');
-  const [seconds, setSeconds] = useState(60);
+  const { booking, initiatePayment, pollPayment } = useBooking();
 
+  const [status,   setStatus]   = useState<PayStatus>('initiating');
+  const [seconds,  setSeconds]  = useState(EXPIRY_SECS);
+  const [initErr,  setInitErr]  = useState('');
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── 1. Trigger STK push on mount ──────────────────────────────────────────
+  useEffect(() => {
+    const phone = booking.phone;
+    if (!phone || !booking.bookingId) {
+      setInitErr('Missing booking or phone number. Please go back.');
+      setStatus('failed');
+      return;
+    }
+
+    initiatePayment(phone)
+      .then(() => setStatus('waiting'))
+      .catch((e: any) => {
+        setInitErr(e.message ?? 'Failed to send STK push. Try again.');
+        setStatus('failed');
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── 2. Count-down timer while waiting ─────────────────────────────────────
   useEffect(() => {
     if (status !== 'waiting') return;
     const t = setInterval(() => {
@@ -23,11 +48,45 @@ export default function Payment() {
     return () => clearInterval(t);
   }, [status]);
 
-  const simulateSuccess = () => {
-    confirmBooking();
-    setStatus('success');
-    setTimeout(() => navigate('/passenger/ticket'), 1400);
+  // ── 3. Poll payment status ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (status !== 'waiting') { clearInterval(pollRef.current ?? undefined); return; }
+
+    pollRef.current = setInterval(async () => {
+      const result = await pollPayment();
+      if (result === 'SUCCESS') {
+        clearInterval(pollRef.current ?? undefined);
+        setStatus('success');
+        setTimeout(() => navigate('/passenger/ticket'), 1400);
+      } else if (result === 'FAILED') {
+        clearInterval(pollRef.current ?? undefined);
+        setStatus('failed');
+        setInitErr('Payment was declined or timed out. Please try again.');
+      }
+      // PENDING → keep polling
+    }, POLL_INTERVAL);
+
+    return () => clearInterval(pollRef.current ?? undefined);
+  }, [status, pollPayment, navigate]);
+
+  // ── Resend STK push ────────────────────────────────────────────────────────
+  const handleResend = async () => {
+    setInitErr('');
+    setSeconds(EXPIRY_SECS);
+    setStatus('initiating');
+    try {
+      await initiatePayment(booking.phone);
+      setStatus('waiting');
+    } catch (e: any) {
+      setInitErr(e.message ?? 'Could not resend. Try again.');
+      setStatus('failed');
+    }
   };
+
+  const icon =
+    status === 'success'   ? '✅' :
+    status === 'failed'    ? '❌' :
+    status === 'initiating'? '⏳' : '📱';
 
   return (
     <DashboardLayout title="M-Pesa Payment" subtitle="Complete payment to confirm your booking">
@@ -36,15 +95,19 @@ export default function Payment() {
       <div style={{ maxWidth: 520 }}>
         <div className="card text-center" style={{ padding: '44px 36px' }}>
           <div style={{ fontSize: 66, marginBottom: 20 }} className={status === 'waiting' ? 'pulse-icon' : ''}>
-            {status === 'success' ? '✅' : status === 'failed' ? '❌' : '📱'}
+            {icon}
           </div>
 
-          <div style={{ fontFamily:"'Syne',sans-serif", fontSize:36, fontWeight:800, marginBottom:6 }}>
-            KES {(booking.fare || 850).toLocaleString()}
+          <div style={{ fontFamily:"'Syne',sans-serif", fontSize: 36, fontWeight: 800, marginBottom: 6 }}>
+            KES {(booking.fare || 0).toLocaleString()}
           </div>
           <p className="text-muted mb-5">
-            STK push sent to <strong style={{ color:'var(--gray-800)' }}>{booking.phone || '0712 345 678'}</strong>
+            STK push sent to <strong style={{ color:'var(--gray-800)' }}>{booking.phone || '—'}</strong>
           </p>
+
+          {status === 'initiating' && (
+            <div style={{ color:'var(--gray-500)', fontSize:14 }}>Sending payment request…</div>
+          )}
 
           {status === 'waiting' && (
             <>
@@ -55,19 +118,10 @@ export default function Payment() {
                   <strong>{seconds}s</strong>.
                 </div>
                 <div style={{ height:4, background:'#fde68a', borderRadius:99, overflow:'hidden' }}>
-                  <div style={{ height:'100%', background:'var(--warning)', borderRadius:99, width:`${(seconds/60)*100}%`, transition:'width 1s linear' }} />
+                  <div style={{ height:'100%', background:'var(--warning)', borderRadius:99, width:`${(seconds/EXPIRY_SECS)*100}%`, transition:'width 1s linear' }} />
                 </div>
               </div>
-              <div style={{ display:'flex', gap:10 }}>
-                <button className="btn btn-ghost btn-full" onClick={() => setSeconds(60)}>Resend STK push</button>
-                <button className="btn btn-primary btn-full" onClick={simulateSuccess}>
-                  Simulate success ✓
-                </button>
-              </div>
-              <button className="btn btn-ghost btn-sm mt-3" style={{ color:'var(--danger)' }}
-                onClick={() => setStatus('failed')}>
-                Simulate failure
-              </button>
+              <button className="btn btn-ghost btn-full" onClick={handleResend}>Resend STK push</button>
             </>
           )}
 
@@ -82,13 +136,9 @@ export default function Payment() {
             <div>
               <div style={{ background:'var(--danger-light)', border:'1px solid #fca5a5', borderRadius:'var(--r)', padding:16, marginBottom:16 }}>
                 <div style={{ fontWeight:700, color:'var(--danger)' }}>Payment failed</div>
-                <div style={{ fontSize:13, color:'#991b1b', marginTop:4 }}>
-                  Your PIN may have been incorrect or the request timed out.
-                </div>
+                <div style={{ fontSize:13, color:'#991b1b', marginTop:4 }}>{initErr || 'Something went wrong.'}</div>
               </div>
-              <button className="btn btn-primary btn-full" onClick={() => { setStatus('waiting'); setSeconds(60); }}>
-                Try again
-              </button>
+              <button className="btn btn-primary btn-full" onClick={handleResend}>Try again</button>
             </div>
           )}
         </div>

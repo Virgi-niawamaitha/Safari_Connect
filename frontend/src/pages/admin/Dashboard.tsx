@@ -1,24 +1,49 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import { AiBanner, StatTile, ChartBar, Badge, AiAgentPanel } from '../../components/UI';
+import { adminApi } from '../../services/api';
+
+interface Stats {
+  totalUsers?: number;
+  activeSaccos?: number;
+  bookingsToday?: number;
+  revenueThisMonth?: number;
+  failedPayments?: number;
+  activeTrips?: number;
+  commissionThisMonth?: number;
+  openDisputes?: number;
+}
 
 export default function AdminDashboard() {
   const nav = useNavigate();
+  const [stats, setStats] = useState<Stats>({});
+
+  useEffect(() => {
+    adminApi.stats()
+      .then(res => setStats(res.data ?? {}))
+      .catch(() => {/* keep defaults */});
+  }, []);
+
+  const fmt  = (n?: number) => n != null ? n.toLocaleString() : '—';
+  const fmtK = (n?: number) => n != null ? `KES ${(n/1000).toFixed(0)}K` : '—';
+
   return (
     <DashboardLayout title="Platform overview" subtitle="Super Admin">
       <AiBanner text="<strong>Platform healthy.</strong> 3 fraud cases auto-held. Dynamic pricing on 14 routes. Revenue up 18% WoW. 2 SACCO approvals pending your review."
         action={<button className="btn btn-primary btn-sm" onClick={() => nav('/admin/saccos')}>Review SACCOs</button>} />
+
       <div className="stat-grid mb-6">
-        <StatTile label="Total users"    value="8,910"   sub="+204 this week" />
-        <StatTile label="Active SACCOs"  value="34"      sub="2 pending approval" />
-        <StatTile label="Bookings today" value="1,240"   sub="+18% WoW" />
-        <StatTile label="Gross rev MTD"  value="KES 4.2M" />
+        <StatTile label="Total users"    value={fmt(stats.totalUsers)}    sub="+204 this week" />
+        <StatTile label="Active SACCOs"  value={fmt(stats.activeSaccos)}  sub="2 pending approval" />
+        <StatTile label="Bookings today" value={fmt(stats.bookingsToday)} sub="+18% WoW" />
+        <StatTile label="Gross rev MTD"  value={stats.revenueThisMonth != null ? `KES ${(stats.revenueThisMonth/1e6).toFixed(1)}M` : '—'} />
       </div>
       <div className="stat-grid mb-6">
-        <StatTile label="Failed payments" value="23"      sub="Today"             neg />
-        <StatTile label="Active trips"    value="67"      sub="Across all SACCOs" />
-        <StatTile label="Commission"      value="KES 210K" sub="This month" />
-        <StatTile label="Open disputes"   value="3"       sub="Needs action"      neg />
+        <StatTile label="Failed payments" value={fmt(stats.failedPayments)}    sub="Today" neg />
+        <StatTile label="Active trips"    value={fmt(stats.activeTrips)}        sub="Across all SACCOs" />
+        <StatTile label="Commission"      value={fmtK(stats.commissionThisMonth)} sub="This month" />
+        <StatTile label="Open disputes"   value={fmt(stats.openDisputes)}       sub="Needs action" neg />
       </div>
 
       <AiAgentPanel

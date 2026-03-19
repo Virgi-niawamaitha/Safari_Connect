@@ -6,17 +6,33 @@ import { useBooking } from '../../context/BookingContext';
 
 export default function ConfirmBooking() {
   const navigate = useNavigate();
-  const { booking, setPhone } = useBooking();
+  const { booking, setPhone, submitBooking } = useBooking();
   const [phone, setLocalPhone] = useState(booking.phone || '');
   const [phoneError, setPhoneError] = useState('');
-
-  const handleProceed = () => {
-    if (!phone) { setPhoneError('Please enter your M-Pesa phone number'); return; }
-    setPhone(phone);
-    navigate('/passenger/payment');
-  };
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const p = booking.passenger;
+
+  const handleProceed = async () => {
+    if (!phone) { setPhoneError('Please enter your M-Pesa phone number'); return; }
+    setPhone(phone);
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      await submitBooking();   // POST /bookings — stores bookingId
+      navigate('/passenger/payment');
+    } catch (e: any) {
+      setSubmitError(e.message ?? 'Failed to create booking. Try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const route  = booking.selectedBus ? `${booking.searchQuery?.from ?? ''} → ${booking.searchQuery?.to ?? ''}` : 'Nairobi → Nakuru';
+  const sacco  = booking.selectedBus?.saccoName ?? 'Modern Coast';
+  const depart = booking.selectedBus?.departureTime ?? '8:00 AM';
+  const arrive = booking.selectedBus?.arrivalTime ?? '11:30 AM';
 
   return (
     <DashboardLayout title="Confirm booking" subtitle="Review everything before paying">
@@ -24,13 +40,14 @@ export default function ConfirmBooking() {
 
       <div className="grid-2" style={{ gap: 24 }}>
         <div>
+          {/* Passenger info */}
           <div className="card mb-4">
             <div className="card-title">Passenger information</div>
             {[
-              ['Full name',  `${p?.firstName ?? 'Jane'} ${p?.lastName ?? 'Mwangi'}`],
-              ['National ID', p?.idNumber ?? '23456789'],
-              ['Residence',   p?.residence ?? 'Nairobi'],
-              ['Email',       p?.email ?? 'jane@email.com'],
+              ['Full name',   `${p?.firstName ?? ''} ${p?.lastName ?? ''}`.trim() || 'Not set'],
+              ['National ID',  p?.idNumber ?? '—'],
+              ['Residence',    p?.residence ?? '—'],
+              ['Email',        p?.email ?? '—'],
             ].map(([l, v]) => (
               <div key={l} style={{ display:'flex', justifyContent:'space-between', padding:'9px 0', borderBottom:'1px solid var(--gray-100)', fontSize:13.5 }}>
                 <span style={{ color:'var(--gray-400)' }}>{l}</span>
@@ -39,15 +56,16 @@ export default function ConfirmBooking() {
             ))}
           </div>
 
+          {/* Trip details + payment */}
           <div className="card">
             <div className="card-title">Trip details</div>
             {[
-              ['Route',      'Nairobi → Nakuru'],
-              ['SACCO',      booking.selectedBus?.saccoName ?? 'Modern Coast'],
-              ['Date',       booking.searchQuery?.date ?? 'Wed 18 Mar 2026'],
-              ['Departure',  '8:00 AM'],
-              ['Arrival',    '11:30 AM (est.)'],
-              ['Seat',       `${booking.selectedSeat ?? '14B'} · ${booking.seatClass ?? 'Economy'}`],
+              ['Route',     route],
+              ['SACCO',     sacco],
+              ['Date',      booking.searchQuery?.date ?? '—'],
+              ['Departure', depart],
+              ['Arrival',   arrive],
+              ['Seat',      `${booking.selectedSeat ?? '—'} · ${booking.seatClass}`],
             ].map(([l, v]) => (
               <div key={l} style={{ display:'flex', justifyContent:'space-between', padding:'9px 0', borderBottom:'1px solid var(--gray-100)', fontSize:13.5 }}>
                 <span style={{ color:'var(--gray-400)' }}>{l}</span>
@@ -56,17 +74,17 @@ export default function ConfirmBooking() {
             ))}
             <div style={{ display:'flex', justifyContent:'space-between', padding:'14px 0', fontSize:16, fontWeight:700 }}>
               <span>Total fare</span>
-              <span style={{ fontFamily:"'Syne',sans-serif", fontSize:22, color:'var(--brand)' }}>
-                KES {(booking.fare || 850).toLocaleString()}
+              <span style={{ fontSize:22, color:'var(--brand)' }}>
+                KES {(booking.fare || 0).toLocaleString()}
               </span>
             </div>
 
-            {/* AI fraud check */}
+            {/* AI security check */}
             <div style={{ background:'var(--brand-light)', border:'1px solid var(--brand-mid)', borderRadius:'var(--r)', padding:'12px 14px', marginBottom:18 }}>
               <div style={{ fontSize:11, fontWeight:700, color:'var(--brand-dark)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:6 }}>🤖 AI Security check</div>
               <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:13 }}>
                 <span style={{ color:'var(--brand)', fontSize:18 }}>✓</span>
-                <span><strong>Passed</strong> · Trust score 94/100 · No duplicate bookings detected</span>
+                <span><strong>Passed</strong> · No duplicate bookings detected · Fraud score: clear</span>
               </div>
             </div>
 
@@ -80,8 +98,14 @@ export default function ConfirmBooking() {
               <span className="form-hint">An STK push will be sent to this number</span>
             </div>
 
-            <button className="btn btn-primary btn-full btn-lg" onClick={handleProceed}>
-              Pay KES {(booking.fare || 850).toLocaleString()} via M-Pesa →
+            {submitError && (
+              <div style={{ background:'var(--danger-light)', border:'1px solid #fca5a5', borderRadius:'var(--r)', padding:'10px 14px', marginBottom:14, fontSize:13, color:'var(--danger)', fontWeight:600 }}>
+                {submitError}
+              </div>
+            )}
+
+            <button className="btn btn-primary btn-full btn-lg" onClick={handleProceed} disabled={submitting}>
+              {submitting ? 'Creating booking…' : `Pay KES ${(booking.fare || 0).toLocaleString()} via M-Pesa →`}
             </button>
           </div>
         </div>
@@ -90,9 +114,9 @@ export default function ConfirmBooking() {
           <div className="card mb-4" style={{ background:'var(--gray-900)', border:'none' }}>
             <div style={{ background:'var(--brand)', borderRadius:'var(--r)', padding:'16px 18px', marginBottom:18 }}>
               <div style={{ fontSize:11, color:'rgba(255,255,255,.7)', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>Your trip</div>
-              <div style={{ fontFamily:"'Syne',sans-serif", fontSize:22, fontWeight:800, color:'#fff' }}>Nairobi → Nakuru</div>
+              <div style={{ fontSize:22, fontWeight:800, color:'#fff' }}>{route}</div>
               <div style={{ fontSize:13, color:'rgba(255,255,255,.75)', marginTop:4 }}>
-                {booking.searchQuery?.date ?? 'Wed 18 Mar 2026'} · 8:00 AM
+                {booking.searchQuery?.date ?? '—'} · {depart}
               </div>
             </div>
             <p style={{ fontSize:13, color:'var(--gray-400)', lineHeight:1.7, marginBottom:12 }}>

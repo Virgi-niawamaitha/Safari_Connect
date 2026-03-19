@@ -1,58 +1,105 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import { Badge } from '../../components/UI';
+import { bookingsApi } from '../../services/api';
+import type { ApiBooking } from '../../services/api';
 import type { BadgeVariant } from '../../types';
 
-interface BookingRow {
-  ref: string; route: string; sacco: string;
-  date: string; seat: string; fare: string;
-  status: string; variant: BadgeVariant;
+function statusVariant(s: string): BadgeVariant {
+  if (s === 'CONFIRMED') return 'green';
+  if (s === 'PENDING')   return 'amber';
+  if (s === 'CANCELLED') return 'red';
+  if (s === 'BOARDED')   return 'blue';
+  return 'gray';
 }
 
-const BOOKINGS: BookingRow[] = [
-  { ref:'SC-2026-00892', route:'Nairobi → Nakuru',   sacco:'Modern Coast', date:'18 Mar 2026', seat:'14B Economy', fare:'KES 850',   status:'Upcoming',  variant:'amber' },
-  { ref:'SC-2026-00788', route:'Nairobi → Mombasa',  sacco:'Easy Coach',   date:'20 Mar 2026', seat:'5A VIP',      fare:'KES 2,200', status:'Confirmed', variant:'green' },
-  { ref:'SC-2026-00541', route:'Nairobi → Kisumu',   sacco:'Modern Coast', date:'10 Mar 2026', seat:'22C Economy', fare:'KES 1,100', status:'Completed', variant:'gray'  },
-  { ref:'SC-2026-00399', route:'Nairobi → Nakuru',   sacco:'Eldoret Exp',  date:'2 Mar 2026',  seat:'8A Business', fare:'KES 1,200', status:'Completed', variant:'gray'  },
-  { ref:'SC-2026-00211', route:'Nairobi → Eldoret',  sacco:'Easy Coach',   date:'14 Feb 2026', seat:'3C Economy',  fare:'KES 900',   status:'Completed', variant:'gray'  },
-];
+function statusLabel(s: string): string {
+  return s.charAt(0) + s.slice(1).toLowerCase();
+}
 
 export default function MyBookings() {
   const navigate = useNavigate();
+  const [rows, setRows]       = useState<ApiBooking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState('');
+
+  useEffect(() => {
+    bookingsApi.mine()
+      .then(res => setRows(res.data ?? []))
+      .catch(e  => setError(e.message ?? 'Failed to load bookings'))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <DashboardLayout
       title="My bookings"
       subtitle="All your trip history and upcoming journeys"
       actions={<button className="btn btn-primary btn-sm" onClick={() => navigate('/passenger/search')}>+ Book new trip</button>}
     >
-      <div className="table-wrap">
-        <table className="sc-table">
-          <thead>
-            <tr>
-              <th>Booking ref</th><th>Route</th><th>SACCO</th><th>Date</th>
-              <th>Seat</th><th>Fare</th><th>Status</th><th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {BOOKINGS.map(b => (
-              <tr key={b.ref}>
-                <td className="td-primary">{b.ref}</td>
-                <td style={{ fontWeight:500 }}>{b.route}</td>
-                <td>{b.sacco}</td>
-                <td>{b.date}</td>
-                <td>{b.seat}</td>
-                <td style={{ fontWeight:600 }}>{b.fare}</td>
-                <td><Badge variant={b.variant}>{b.status}</Badge></td>
-                <td>
-                  <button className="btn btn-sm" onClick={() => navigate('/passenger/ticket')}>
-                    View
-                  </button>
-                </td>
+      {loading && (
+        <div className="card" style={{ padding:40, textAlign:'center', color:'var(--gray-400)' }}>
+          <div className="pulse-icon" style={{ fontSize:32, marginBottom:12 }}>📋</div>
+          <div>Loading your bookings…</div>
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="card" style={{ padding:32, textAlign:'center' }}>
+          <div style={{ color:'var(--danger)', fontWeight:600, marginBottom:8 }}>Could not load bookings</div>
+          <div className="text-muted" style={{ fontSize:13 }}>{error}</div>
+        </div>
+      )}
+
+      {!loading && !error && rows.length === 0 && (
+        <div className="card" style={{ padding:40, textAlign:'center' }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>🎫</div>
+          <div style={{ fontWeight:600, marginBottom:6 }}>No bookings yet</div>
+          <div className="text-muted" style={{ fontSize:13 }}>Book your first trip to see it here.</div>
+          <button className="btn btn-primary btn-sm mt-4" onClick={() => navigate('/passenger/search')}>Book a trip</button>
+        </div>
+      )}
+
+      {!loading && !error && rows.length > 0 && (
+        <div className="table-wrap">
+          <table className="sc-table">
+            <thead>
+              <tr>
+                <th>Booking ref</th><th>Route</th><th>SACCO</th><th>Date</th>
+                <th>Seat</th><th>Fare</th><th>Status</th><th>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map(b => {
+                const route = `${b.trip?.route?.origin ?? '—'} → ${b.trip?.route?.destination ?? '—'}`;
+                const sacco = b.trip?.sacco?.name ?? '—';
+                const date  = b.trip?.departureTime
+                  ? new Date(b.trip.departureTime).toLocaleDateString('en-KE', { day:'numeric', month:'short', year:'numeric' })
+                  : '—';
+                const seat  = `${b.seat?.seatNumber ?? '—'} ${b.seat?.seatClass ?? ''}`;
+                const fare  = `KES ${parseFloat(b.amount || '0').toLocaleString()}`;
+                const variant = statusVariant(b.status);
+                return (
+                  <tr key={b.id}>
+                    <td className="td-primary">{b.bookingCode}</td>
+                    <td style={{ fontWeight:500 }}>{route}</td>
+                    <td>{sacco}</td>
+                    <td>{date}</td>
+                    <td>{seat}</td>
+                    <td style={{ fontWeight:600 }}>{fare}</td>
+                    <td><Badge variant={variant}>{statusLabel(b.status)}</Badge></td>
+                    <td>
+                      <button className="btn btn-sm" onClick={() => navigate('/passenger/ticket')}>
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </DashboardLayout>
   );
 }
